@@ -40,6 +40,13 @@ program kaldırma, sürücüler, ağ, güvenlik, depolama, benchmark ve otomatik
 | **Otomatik Bakım** | Takvimli görevler (analiz, temizlik, başlangıç denetimi, geri alınan ayarları onarma, geri yükleme noktası), yalnızca boştayken/prizdeyken çalışma, 3 hazır profil, uyarı kuralları, bakım geçmişi, oturum açılışında başlatma. |
 | **Araçlar** | Sağ tık menüsü yöneticisi, kilitli dosya bulucu, güvenli silme (SSD uyarısıyla), dosya taşıyıcı (geri alınabilir), **sistem anlık görüntüsü ve fark karşılaştırma**, yinelenen uygulama/çalışma zamanı tespiti. |
 
+| **Hız Aşırtma** | İşlemcinin ve ekran kartının kilidinin açık olup olmadığını tespit eder, doğru resmî aracı (Intel XTU, AMD Ryzen Master, NVIDIA App, MSI Afterburner, Adrenalin) gösterir, belleğin XMP/EXPO hızının altında çalıştığını fark eder, Windows'un işlemci turbo politikasını geri alınabilir şekilde ayarlar. Saat/voltaj değerlerini kendisi yazmaz. |
+
+**Tek tık optimizasyon:** Panodaki düğme yalnızca güvenli adımları (önerilen temizlik, herkes için önerilen ayarlar, güvenli bulgu çözümleri) listeler, siz seçtikten sonra uygular, önce/sonra ölçer ve hepsini tek tıkla geri alır.
+**Uyarılar:** Aşırı ısınma, bellek baskısı ve düşük disk alanı için ayarlanabilir eşiklerle bildirim.
+**Güncelleme:** Uygulama GitHub sürümlerini günde en fazla bir kez denetler; yeni sürümü indirir, SHA-256 ile doğrular ve kendini günceller (kapatılabilir).
+**Kurulum:** `OptiCore-Kurulum.exe` yönetici yetkisi gerektirmeden `%LOCALAPPDATA%\Programs\OptiCore` altına kurar, Başlat menüsüne ve "Yüklü uygulamalar"a ekler. Sessiz kurulum: `OptiCore-Kurulum.exe --quiet`, sessiz kaldırma: `OptiCore.exe --uninstall --quiet`.
+
 Ek olarak: Türkçe/İngilizce arayüz, koyu/açık/sistem teması ve 5 vurgu rengi, **Ctrl+K komut paleti** (sayfa,
 ayar ve eylem arama), bildirim merkezi, sistem tepsisi, tek örnek çalışma, simülasyon modu.
 
