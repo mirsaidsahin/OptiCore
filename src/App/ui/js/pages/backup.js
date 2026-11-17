@@ -6,7 +6,7 @@ export const SOURCES = {
   tweaks: ['Windows Ayarları', 'Windows Tweaks', 'sliders'], startup: ['Başlangıç', 'Startup', 'power'], cleanup: ['Temizlik', 'Cleanup', 'sparkles'],
   processes: ['İşlemler', 'Processes', 'activity'], privacy: ['Gizlilik', 'Privacy', 'eyeOff'], backup: ['Yedekleme', 'Backup', 'history'],
   gaming: ['Oyun', 'Gaming', 'gamepad'], network: ['Ağ', 'Network', 'wifi'], apps: ['Uygulamalar', 'Apps', 'package'], automation: ['Otomatik bakım', 'Automation', 'repeat'],
-  tools: ['Araçlar', 'Tools', 'wrench'], drivers: ['Sürücüler', 'Drivers', 'plug'],
+  tools: ['Araçlar', 'Tools', 'wrench'], overclock: ['Hız Aşırtma', 'Overclocking', 'rocket'], drivers: ['Sürücüler', 'Drivers', 'plug'],
 };
 const STATUS = {
   intact: ['Hâlâ geçerli', 'Still in effect', 'good'], restored: ['Eski değerine dönmüş', 'Back at the old value', 'warn'], changed: ['Başka bir şey değiştirmiş', 'Changed by something else', 'warn'],

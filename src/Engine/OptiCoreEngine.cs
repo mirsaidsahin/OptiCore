@@ -44,6 +44,7 @@ public sealed partial class OptiCoreEngine : IDisposable
     public NetworkService Network { get; }
     public DiagnosticsService Diagnostics { get; }
     public GamingService Gaming { get; }
+    public OverclockService Overclock { get; }
     public BenchmarkService Benchmark { get; }
     public AutomationService Automation { get; }
     public ToolsService Tools { get; }
@@ -86,6 +87,9 @@ public sealed partial class OptiCoreEngine : IDisposable
         Gaming.Register(Rpc);
         Benchmark = new BenchmarkService(Jobs, Store, Metrics, SystemInfo);
         Benchmark.Register(Rpc);
+        Overclock = new OverclockService(SystemInfo, Apps, Journal);
+        Overclock.Register(Rpc);
+        Insights.AddSource("overclock", Overclock.Findings);
         Diagnostics = new DiagnosticsService(Jobs, Journal);
         Diagnostics.Register(Rpc);
         Insights.AddSource("diagnostics", Diagnostics.Findings, slow: true);

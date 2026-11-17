@@ -14,6 +14,7 @@ export const ROUTES = [
   { id: 'startup', group: 'optimize', icon: 'power', title: ['Başlangıç', 'Startup'], keys: 'açılış boot servis hizmet zamanlanmış görev services tasks' },
   { id: 'tweaks', group: 'optimize', icon: 'sliders', title: ['Windows Ayarları', 'Windows Tweaks'], keys: 'gizlilik telemetri güç planı privacy power plan visual effects dns' },
   { id: 'gaming', group: 'optimize', icon: 'gamepad', title: ['Oyun', 'Gaming'], keys: 'fps frametime oyun modu game mode ets2 fs25 steam overlay' },
+  { id: 'overclock', group: 'optimize', icon: 'rocket', title: ['Hız Aşırtma', 'Overclocking'], keys: 'overclock oc hız aşırtma turbo boost xmp expo pbo afterburner xtu ryzen master voltaj' },
   { id: 'processes', group: 'manage', icon: 'activity', title: ['İşlemler', 'Processes'], keys: 'görev yöneticisi task manager kill sonlandır öncelik priority' },
   { id: 'apps', group: 'manage', icon: 'package', title: ['Uygulamalar', 'Apps'], keys: 'kaldır uninstall program bloatware store' },
   { id: 'storage', group: 'manage', icon: 'disk', title: ['Depolama', 'Storage'], keys: 'disk ssd smart büyük dosyalar large files treemap' },
