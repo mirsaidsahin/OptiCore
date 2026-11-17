@@ -1,0 +1,13 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/src/">
+    <Project Path="src/Engine/OptiCore.Engine.csproj" />
+    <Project Path="src/App/OptiCore.App.csproj" />
+    <Project Path="src/Cli/OptiCore.Cli.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OptiCore.Tests.csproj" />
+  </Folder>
+</Solution>
