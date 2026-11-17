@@ -167,6 +167,7 @@ public sealed class AppSettings
     public bool CloseToTray { get; set; } = true;
     public bool StartMinimized { get; set; }
     public bool ReduceMotion { get; set; }
+    public bool CheckUpdates { get; set; } = true;
     public AlertSettings Alerts { get; set; } = new();
     /// <summary>Finding ids the user chose to hide.</summary>
     public List<string> IgnoredFindings { get; set; } = [];

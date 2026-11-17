@@ -45,6 +45,9 @@ public sealed partial class OptiCoreEngine : IDisposable
     public DiagnosticsService Diagnostics { get; }
     public GamingService Gaming { get; }
     public OverclockService Overclock { get; }
+    public AlertService Alerts { get; }
+    public OptimizeService Optimize { get; }
+    public UpdateService Updates { get; }
     public BenchmarkService Benchmark { get; }
     public AutomationService Automation { get; }
     public ToolsService Tools { get; }
@@ -87,6 +90,11 @@ public sealed partial class OptiCoreEngine : IDisposable
         Gaming.Register(Rpc);
         Benchmark = new BenchmarkService(Jobs, Store, Metrics, SystemInfo);
         Benchmark.Register(Rpc);
+        Alerts = new AlertService(Metrics, Settings, Notices, SystemInfo);
+        Optimize = new OptimizeService(Insights, Cleanup, Tweaks, Startup, SystemInfo, Journal, Jobs, Rpc);
+        Optimize.Register(Rpc);
+        Updates = new UpdateService(Store, Settings, Notices, Jobs, () => AppExecutable);
+        Updates.Register(Rpc);
         Overclock = new OverclockService(SystemInfo, Apps, Journal);
         Overclock.Register(Rpc);
         Insights.AddSource("overclock", Overclock.Findings);
@@ -147,6 +155,7 @@ public sealed partial class OptiCoreEngine : IDisposable
         Storage.Start();
         Gaming.Start();
         Automation.Start();
+        Updates.Start();
         StartModules();
         // The dashboard starts with the quick checks; the slow ones (security, drivers, event logs) follow in the background.
         if (Options.Host == "desktop")

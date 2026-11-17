@@ -54,6 +54,12 @@ function Alerts() {
     ${row(t('Uyarılar', 'Alerts'), t('Arka planda izleme ve bildirimler', 'Background monitoring and notifications'), html`<${Switch} on=${a.enabled} onChange=${(enabled) => set({ enabled })} />`)}
     ${row(t('İşlemciyi uzun süre yoran uygulama', 'App hogging the CPU'), t('Bir uygulama bu süre boyunca yoğun işlemci kullanırsa bildir', 'Notify when an app uses heavy CPU for this long'),
       html`<${Select} class="sm" value=${String(a.cpuSeconds)} onChange=${(v) => set({ cpuSeconds: +v })} options=${[60, 90, 180, 300, 600].map((s) => ({ value: String(s), label: s < 120 ? s + ' sn' : s / 60 + ' dk' }))} />`)}
+    ${row(t('Aşırı ısınma', 'Overheating'), t('En sıcak sensör bir dakika boyunca bu değerin üzerinde kalırsa bildir', 'Notify when the hottest sensor stays above this for a minute'),
+      html`<${Select} class="sm" value=${String(a.temperatureC)} onChange=${(v) => set({ temperatureC: +v })} options=${[80, 85, 90, 95].map((v) => ({ value: String(v), label: v + ' °C' }))} />`)}
+    ${row(t('Bellek baskısı', 'Memory pressure'), t('Bellek kullanımı iki dakika boyunca bu değerin üzerinde kalırsa bildir', 'Notify when memory use stays above this for two minutes'),
+      html`<${Select} class="sm" value=${String(a.ramPercent)} onChange=${(v) => set({ ramPercent: +v })} options=${[85, 90, 92, 95].map((v) => ({ value: String(v), label: '%' + v }))} />`)}
+    ${row(t('Düşük disk alanı', 'Low disk space'), t('Bir sürücüde boş alan bu oranın altına düşerse bildir', 'Notify when a drive\'s free space drops below this'),
+      html`<${Select} class="sm" value=${String(a.diskFreePercent)} onChange=${(v) => set({ diskFreePercent: +v })} options=${[5, 10, 15, 20].map((v) => ({ value: String(v), label: '%' + v }))} />`)}
     ${row(t('Bellek sızıntısı tespiti', 'Memory leak detection'), t('Belleği sürekli büyüyen uygulamaları bildir', 'Notify about apps whose memory keeps growing'), html`<${Switch} on=${a.leakDetection} onChange=${(leakDetection) => set({ leakDetection })} />`)}
     ${row(t('Başlangıç bekçisi', 'Startup guard'), t('Başlangıca yeni bir program eklendiğinde bildir', 'Notify when a program adds itself to startup'), html`<${Switch} on=${a.startupGuard} onChange=${(startupGuard) => set({ startupGuard })} />`)}
   <//>`;

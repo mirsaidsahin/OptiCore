@@ -1,4 +1,4 @@
-<Project>
+﻿<Project>
   <PropertyGroup>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
@@ -12,7 +12,7 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CA1416;CS8981;SYSLIB1054;SYSLIB1096;CA2101</NoWarn>
 
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Product>OptiCore</Product>
     <Company>OptiCore</Company>
     <Copyright>OptiCore</Copyright>

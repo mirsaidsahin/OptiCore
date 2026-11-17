@@ -70,6 +70,8 @@ switch ($Task) {
         # API documentation files that NuGet packages carry along are not needed at run time.
         Get-ChildItem "$root\release\*.xml", "$root\release\*.pdb" -ErrorAction SilentlyContinue | Remove-Item -ErrorAction SilentlyContinue
         if (Test-Path "$root\release\ui") { Remove-Item "$root\release\ui" -Recurse -Force }
+        # The same binary acts as its own installer when its name contains "Kurulum" or "Setup".
+        Copy-Item "$root\release\OptiCore.exe" "$root\release\OptiCore-Kurulum.exe" -Force
         Write-Host "Published: $root\release\OptiCore.exe (single file, no .NET installation needed)"
     }
     'clean' {

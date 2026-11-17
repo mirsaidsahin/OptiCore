@@ -4,6 +4,7 @@ import {
 } from '../lib/core.js';
 import { Page, Card, Bar, Btn, Chip, FileIcon, Icon, Loading, Modal, Switch, Tabs, Empty, SimulationNote } from '../lib/ui.js';
 import { Spark, Ring, BarList } from '../lib/charts.js';
+import { OptimizeDialog } from './optimize.js';
 
 const GRADES = {
   excellent: ['Mükemmel', 'Excellent', 'var(--good)'],
@@ -22,7 +23,7 @@ const WIDGETS = [
   ['activity', 'Son işlemler', 'Recent activity'],
 ];
 
-function Hero({ report, onAnalyze }) {
+function Hero({ report, onAnalyze, onOptimize }) {
   if (report.data === undefined) return html`<div class="card pad"><${Loading} lines=${5} height=${20} /></div>`;
   const r = report.data;
   const [tr, en, color] = GRADES[r.grade] || GRADES.good;
@@ -46,9 +47,10 @@ function Hero({ report, onAnalyze }) {
       ${r.parts.map((p) => html`<div key=${p.id} class="subscore">
         <span>${p.label}</span><${Bar} value=${p.score} tone=${p.score >= 85 ? 'good' : p.score >= 60 ? 'warn' : 'bad'} /><b>${p.score}</b>
       </div>`)}
-      <div class="row gap-s mt-s">
-        <${Btn} kind="primary" icon="bolt" onClick=${() => go('insights/live')}>${t('Şu an neden yavaş?', 'Why is it slow right now?')}<//>
-        <${Btn} icon="refresh" onClick=${onAnalyze}>${t('Tam analiz', 'Full analysis')}<//>
+      <div class="row wrap gap-s mt-s">
+        <${Btn} kind="primary" icon="rocket" onClick=${onOptimize}>${t('Tek tık optimize et', 'Optimize in one click')}<//>
+        <${Btn} icon="bolt" onClick=${() => go('insights/live')}>${t('Şu an neden yavaş?', 'Why is it slow right now?')}<//>
+        <${Btn} kind="ghost" icon="refresh" onClick=${onAnalyze}>${t('Tam analiz', 'Full analysis')}<//>
       </div>
     </div>
     <div class="hero-recs col" style=${{ gap: 0 }}>
@@ -202,6 +204,7 @@ export default function Dashboard() {
   const report = useRpc('insights.summary', {}, { interval: 60000 });
   const [hidden, setHidden] = useState(() => uiState('dashHidden', []));
   const [customize, setCustomize] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
   const show = (id) => !hidden.includes(id);
   const ready = live.data && live.data.now;
   const hw = hardware.data;
@@ -217,7 +220,7 @@ export default function Dashboard() {
     actions=${html`<${Btn} icon="sliders" kind="ghost" onClick=${() => setCustomize(true)}>${t('Özelleştir', 'Customize')}<//>`}>
     <div class="col" style=${{ gap: '14px' }}>
       <${SimulationNote} />
-      <${Hero} report=${report} onAnalyze=${analyze} />
+      <${Hero} report=${report} onAnalyze=${analyze} onOptimize=${() => setOptimizing(true)} />
       ${show('tiles') && (ready ? html`<${Tiles} live=${live.data} />` : html`<div class="card pad"><${Loading} lines=${3} /></div>`)}
       <div class="grid c2">
         ${show('cores') && ready && html`<${Cores} live=${live.data} hardware=${hw} />`}
@@ -227,6 +230,7 @@ export default function Dashboard() {
       </div>
       ${show('activity') && html`<${Activity} />`}
     </div>
+    ${optimizing && html`<${OptimizeDialog} onClose=${() => setOptimizing(false)} onDone=${() => report.reload()} />`}
     ${customize && html`<${Customize} hidden=${hidden} onClose=${() => setCustomize(false)} onChange=${(next) => { setHidden(next); setUiState('dashHidden', next); }} />`}
   <//>`;
 }

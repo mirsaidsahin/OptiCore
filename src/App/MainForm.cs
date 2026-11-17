@@ -161,6 +161,14 @@ internal sealed class MainForm : Form
             BeginInvoke(Close);
             return true;
         }));
+        rpc.On("shell.restartApp", _ => OnUi(() =>
+        {
+            var keep = _args.Where(a => a is not "--relaunch" and not "--minimized").Select(a => a.Contains(' ') ? $"\"{a}\"" : a);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!, string.Join(" ", keep.Append("--relaunch"))) { UseShellExecute = true });
+            _exiting = true;
+            BeginInvoke(Close);
+            return true;
+        }));
         rpc.On("shell.pickFolder", _ => OnUi<string?>(() =>
         {
             using var dlg = new FolderBrowserDialog { UseDescriptionForTitle = true, Description = "OptiCore" };

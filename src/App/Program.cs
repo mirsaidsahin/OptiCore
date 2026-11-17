@@ -12,6 +12,17 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Contains("--uninstall") || Installer.IsSetupLaunch(args))
+        {
+            ApplicationConfiguration.Initialize();
+            bool quiet = args.Contains("--quiet");
+            if (args.Contains("--uninstall")) return Installer.Uninstall(quiet) ? 0 : 1;
+            if (quiet) return Installer.Install(desktop: !args.Contains("--no-desktop"), autostart: args.Contains("--autostart"), launch: false, quiet: true) ? 0 : 1;
+            Application.Run(new InstallerForm());
+            return 0;
+        }
+        Engine.Modules.UpdateService.CleanupAfterUpdate(Environment.ProcessPath);
+
         bool dryRun = args.Contains("--dry-run");
         bool minimized = args.Contains("--minimized");
         string? dataDir = Arg(args, "--data-dir");

@@ -1,9 +1,38 @@
 // Settings: appearance, language, behaviour, data and about.
-import { html, useRpc, call, act, t, app, useStore, patchSettings, askElevation } from '../lib/core.js';
-import { Page, Card, Btn, Chip, Switch, Select, KV, Banner } from '../lib/ui.js';
+import { html, useState, useRpc, useJob, call, act, t, app, useStore, patchSettings, askElevation, confirmDialog } from '../lib/core.js';
+import { Page, Card, Btn, Chip, Switch, Select, KV, Banner, JobBar, openUrl } from '../lib/ui.js';
 import { Logo } from '../lib/icons.js';
 
 const ACCENTS = [['violet', '#7c6cff'], ['cyan', '#06b6d4'], ['emerald', '#10b981'], ['amber', '#f59e0b'], ['rose', '#f43f5e']];
+
+function Updates({ s, info }) {
+  const [check, setCheck] = useState(null);
+  const job = useJob();
+  const run = () => act(async () => setCheck(await call('update.check')));
+  const install = () => act(async () => {
+    const r = await job.run('update.install');
+    if (r.installed) {
+      const ok = await confirmDialog({ title: t(`OptiCore ${r.version} kuruldu`, `OptiCore ${r.version} installed`), body: t('Yeni sürümü kullanmak için OptiCore yeniden başlatılsın mı?', 'Restart OptiCore to use the new version?'), confirm: t('Yeniden başlat', 'Restart') });
+      if (ok) await call('shell.restartApp');
+    }
+  });
+  return html`<${Card} title=${t('Güncellemeler', 'Updates')} icon="download">
+    <div class="item" style=${{ padding: '8px 0' }}><div class="grow"><div class="t">${t('Yüklü sürüm', 'Installed version')}: ${info.version}</div>
+      <div class="s">${check ? (check.newer ? t(`Yeni sürüm var: ${check.latest}`, `A new version is available: ${check.latest}`) : t('OptiCore güncel.', 'OptiCore is up to date.')) : t('Yeni sürümler GitHub\'daki proje sayfasından denetlenir.', 'New versions are checked on the project\'s GitHub page.')}</div></div>
+      <${Btn} size="sm" icon="refresh" onClick=${run}>${t('Denetle', 'Check')}<//></div>
+    ${check && check.newer && html`<div class="col mt-s">
+      ${check.notes && html`<div class="code" style=${{ maxHeight: '160px' }}>${check.notes}</div>`}
+      <div class="row gap-s">
+        ${check.canInstall ? html`<${Btn} kind="primary" icon="download" busy=${job.running} onClick=${install}>${t('Güncelle', 'Update')}<//>`
+          : html`<${Btn} icon="external" onClick=${() => openUrl(check.url)}>${t('Sürüm sayfasını aç', 'Open the release page')}<//>`}
+      </div>
+      <${JobBar} job=${job.job} />
+    </div>`}
+    <div class="item" style=${{ padding: '8px 0' }}><div class="grow"><div class="t">${t('Güncellemeleri otomatik denetle', 'Check for updates automatically')}</div>
+      <div class="s">${t('Günde en fazla bir kez; yalnızca herkese açık sürüm listesi okunur, bilgisayarınızla ilgili hiçbir bilgi gönderilmez.', 'At most once a day; only the public release list is read, nothing about your PC is sent.')}</div></div>
+      <${Switch} on=${s.checkUpdates} onChange=${(checkUpdates) => patchSettings({ checkUpdates })} /></div>
+  <//>`;
+}
 
 export default function Settings() {
   const state = useStore(app);
@@ -28,6 +57,7 @@ export default function Settings() {
         ${row(t('Yoksayılan bulgular', 'Ignored findings'), t(`${s.ignoredFindings.length} bulgu yoksayılıyor`, `${s.ignoredFindings.length} findings ignored`),
           html`<${Btn} size="sm" disabled=${!s.ignoredFindings.length} onClick=${() => patchSettings({ ignoredFindings: [] })}>${t('Sıfırla', 'Reset')}<//>`)}
       <//>
+      <${Updates} s=${s} info=${info} />
       <${Card} title=${t('Yetki ve güvenlik', 'Rights and safety')} icon="shield">
         <${KV} rows=${[
           [t('Çalışma kipi', 'Running as'), info.elevated ? html`<${Chip} tone="good">${t('Yönetici', 'Administrator')}<//>` : html`<${Chip} tone="warn">${t('Standart kullanıcı', 'Standard user')}<//>`],
@@ -38,8 +68,8 @@ export default function Settings() {
           'OptiCore runs as a standard user by default and asks for rights only when needed. Simulation mode (--dry-run) scans everything but changes nothing; ideal for trying things out.')}</div>
       <//>
       <${Card} title=${t('Veriler', 'Data')} icon="folder">
-        <div class="small muted">${t('OptiCore her şeyi bu bilgisayarda, okunabilir JSON dosyaları olarak saklar. Hiçbir veri bir sunucuya gönderilmez; internete yalnızca sizin başlattığınız hız testi, DNS testi ve güncelleme denetimi çıkar.',
-          'OptiCore keeps everything on this PC as readable JSON files. No data is sent to any server; the only internet traffic is the speed test, DNS test and update check that you start yourself.')}</div>
+        <div class="small muted">${t('OptiCore her şeyi bu bilgisayarda, okunabilir JSON dosyaları olarak saklar. Hiçbir veri bir sunucuya gönderilmez; internete yalnızca sizin başlattığınız hız testi ve DNS testi ile (kapatılabilen) güncelleme denetimi çıkar.',
+          'OptiCore keeps everything on this PC as readable JSON files. No data is sent to any server; the only internet traffic is the speed test and DNS test you start yourself and the update check (which can be turned off).')}</div>
         <div class="code mt">${info.dataDir}</div>
         <div class="mt"><${Btn} size="sm" icon="folder" onClick=${() => act(() => call('shell.reveal', { path: info.dataDir }))}>${t('Klasörü aç', 'Open folder')}<//></div>
       <//>
