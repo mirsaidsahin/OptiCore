@@ -356,6 +356,7 @@ public sealed class BenchmarkService(JobManager jobs, DataStore store, MetricsSa
 
     public void Register(RpcRouter rpc)
     {
+        rpc.On("bench.rank", _ => HardwareRank.Evaluate(system.Hardware(), store.ReadLines<BenchResult>(HistoryFile)));
         rpc.On("bench.history", _ => store.ReadLines<BenchResult>(HistoryFile).OrderByDescending(r => r.Time).Take(200).ToList());
         rpc.On("bench.run", c =>
         {

@@ -1,7 +1,7 @@
 // Hardware Benchmark: CPU, memory, disk, GPU (WebGL), internet and a sustained-load stability test, with history and comparison.
 import { html, useState, useRef, useRpc, useJob, call, act, t, cx, num, dateTime, ago, toast } from '../lib/core.js';
-import { Page, Card, Btn, Chip, Icon, Empty, Banner, Async, Stat, JobBar, Select, Table, KV } from '../lib/ui.js';
-import { LineChart } from '../lib/charts.js';
+import { Page, Card, Btn, Chip, Icon, Empty, Banner, Async, Stat, JobBar, Select, Table, KV, openUrl } from '../lib/ui.js';
+import { LineChart, BarList } from '../lib/charts.js';
 
 const TESTS = [
   { id: 'cpu', icon: 'cpu', title: ['İşlemci', 'Processor'], desc: ['Tek ve çok çekirdekli tamsayı, şifreleme ve bellek erişimi karışımı. ~20 sn.', 'Single and multi-core mix of integer math, cryptography and memory access. ~20 s.'] },
@@ -71,6 +71,50 @@ void main(){
   return { fps, gflops, score: Math.round((fps / 33.8) * 1000), label: name || label };
 }
 
+const TIER_TONE = ['', 'bad', 'warn', 'info', 'good', 'acc'];
+const PART = { cpu: ['İşlemci', 'Processor', 'cpu'], gpu: ['Ekran kartı', 'Graphics', 'gpu'], memory: ['Bellek', 'Memory', 'ram'], storage: ['Depolama', 'Storage', 'disk'] };
+const SOURCE = { measured: ['OptiCore ölçümü', 'Measured by OptiCore'], table: ['Yaklaşık değer (gömülü tablo)', 'Approximate (built-in table)'], type: ['Disk türüne göre', 'By disk type'], system: ['Sistemden', 'From the system'] };
+
+function Tiers({ tier }) {
+  return html`<div class="row gap-s" style=${{ gap: '3px' }}>${[1, 2, 3, 4, 5].map((i) => html`<i key=${i} style=${{ width: '22px', height: '7px', borderRadius: '4px', background: i <= tier ? `var(--${TIER_TONE[tier] === 'acc' ? 'accent' : TIER_TONE[tier]})` : 'var(--line)' }}></i>`)}</div>`;
+}
+
+function RankPart({ p }) {
+  const [open, setOpen] = useState(false);
+  const [tr, en, icon] = PART[p.id];
+  const fmt = (v) => (p.unit === 'GB' ? num(v) + ' GB' : p.unit === 'MB/s' ? num(v) + ' MB/s' : num(v));
+  const items = p.refs ? [...p.refs.map((r) => ({ key: r.name, label: r.name + (r.mobile ? ' ' + t('(dizüstü)', '(laptop)') : ''), value: r.value, right: fmt(r.value), color: 'var(--line-2)' })),
+    { key: '__me', label: t('Bu bilgisayar', 'This PC') + ' · ' + p.name, value: p.value, right: fmt(p.value), color: 'var(--accent)' }].sort((a, b) => b.value - a.value) : [];
+  return html`<div class="item" style=${{ alignItems: 'flex-start', flexDirection: 'column', gap: '6px' }}>
+    <div class="row" style=${{ width: '100%' }}>
+      <${Icon} name=${icon} size="17" class="acc" />
+      <div class="grow" style=${{ minWidth: 0 }}><div class="t">${t(tr, en)}</div><div class="s ell">${p.name}</div></div>
+      ${p.unknown ? html`<${Chip}>${t('Tabloda yok', 'Not in table')}<//>` : html`<${Tiers} tier=${p.tier} /><${Chip} tone=${TIER_TONE[p.tier]}>${p.tierLabel}<//>`}
+    </div>
+    <div class="small muted">${p.verdict}</div>
+    <div class="row wrap gap-s">
+      ${p.refs && html`<${Btn} size="sm" kind="ghost" icon=${open ? 'chevU' : 'chevD'} onClick=${() => setOpen(!open)}>${t('Diğerleriyle karşılaştır', 'Compare with others')}<//>`}
+      ${p.search && html`<${Btn} size="sm" kind="ghost" icon="external" onClick=${() => openUrl(p.search)}>${t('İnternetteki test sonuçları', 'Test results online')}<//>`}
+      ${p.source && html`<span class="tiny dim">${t(...SOURCE[p.source])}</span>`}
+    </div>
+    ${open && html`<div style=${{ width: '100%', maxWidth: '640px' }}><${BarList} items=${items} /></div>`}
+  </div>`;
+}
+
+function Rank({ reloadKey }) {
+  const d = useRpc('bench.rank', {}, { deps: [reloadKey] });
+  return html`<${Async} state=${d}>${(r) => html`<${Card} title=${t('Bu bilgisayar ne kadar iyi?', 'How good is this PC?')} icon="star" flush
+    actions=${html`<${Chip} tone=${TIER_TONE[r.overallTier]}>${t('Genel', 'Overall')}: ${r.overallLabel}<//>`}>
+    <div style=${{ padding: '4px 16px 10px' }} class="small">
+      <b>${t('Oyunlar', 'Games')}:</b> <span class="muted">${r.gaming}</span>
+      ${r.bottleneck && html`<div class="warn mt-s">${r.bottleneck}</div>`}
+    </div>
+    ${r.parts.map((p) => html`<${RankPart} key=${p.id} p=${p} />`)}
+    <div class="tiny dim" style=${{ padding: '8px 16px 12px' }}>${t('Karşılaştırma, yayımlanmış test ortalamalarından derlenmiş yaklaşık değerlere dayanır (±%15). İşlemci ve disk için kendi ölçümünüz varsa o kullanılır; daha kesin sonuç için aşağıdaki testleri çalıştırın.',
+      'Comparisons rely on approximate figures compiled from published test averages (±15%). Your own measurement is used for the processor and disk when available; run the tests below for a more precise result.')}</div>
+  <//>`}<//>`;
+}
+
 function ResultCard({ r, compare }) {
   const test = TESTS.find((x) => x.id === r.kind) || TESTS[0];
   let timeline = null;
@@ -112,6 +156,7 @@ export default function Benchmark({ sub }) {
   return html`<${Page} title=${t('Benchmark', 'Benchmark')} desc=${t('Sabit iş yükleriyle ölçülen donanım puanları. 1000 puan, 2022 yapımı orta sınıf bir dizüstüne (Core i5-1235U, DDR4-3200, NVMe) karşılık gelir. Puanlar yalnızca OptiCore sonuçlarıyla karşılaştırılabilir.',
     'Hardware scores measured with fixed workloads. 1000 points equals a 2022 mid-range laptop (Core i5-1235U, DDR4-3200, NVMe). Scores are only comparable with other OptiCore results.')}>
     <div class="col" style=${{ gap: '14px' }}>
+      <${Rank} reloadKey=${list.length} />
       <${Banner} tone="info" icon="info">${t('En doğru sonuç için testi bilgisayar prizdeyken, diğer programlar kapalıyken çalıştırın. Bir optimizasyonun etkisini görmek için önce ve sonra aynı testi tekrarlayın.', 'For accurate results run tests on AC power with other programs closed. To see the effect of an optimization, repeat the same test before and after.')}<//>
       <div class="grid auto-lg">${TESTS.map((x) => html`<div key=${x.id} class="card pad col">
         <div class="row"><${Icon} name=${x.icon} size="18" class="acc" /><b class="grow">${t(...x.title)}</b>

@@ -414,18 +414,43 @@ public sealed class StartupService
     }
 
     // ------------------------------------------------------------------ startup guard
+    private static readonly System.Text.RegularExpressions.Regex Volatile = new(
+        @"\{[0-9A-Fa-f-]{36}\}|[_-]?[0-9A-Fa-f]{16,}|\d+(\.\d+)+|S-1-5-21[-\d]+|\d+$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Identity of a startup item that survives updates: updaters re-register themselves with the version,
+    /// a GUID or a hash in the name (GoogleUpdaterTaskSystem159.0.8{…}, MicrosoftEdgeAutoLaunch_3F2A…).
+    /// </summary>
+    internal static string StableId(string id) => Volatile.Replace(id, "").TrimEnd(' ', '_', '-').ToLowerInvariant();
+
+    /// <summary>Publishers whose verified, signed updaters and helpers are not worth an alarm.</summary>
+    private static readonly string[] TrustedPublishers =
+        ["Microsoft", "Google LLC", "Mozilla Corporation", "Apple Inc.", "Intel Corporation", "Advanced Micro Devices", "NVIDIA Corporation", "Valve", "Adobe Inc.", "Realtek", "Logitech", "Epic Games", "Opera Norway", "Brave Software", "Spotify AB", "Discord Inc."];
+
+    internal static bool IsTrustedUpdater(StartupEntry e)
+    {
+        if (e.Flags.Count > 0 || e.Path is null) return false;
+        var sig = Signature.Check(e.Path);
+        return sig.Signed && sig.Trusted && TrustedPublishers.Any(p => sig.Signer?.Contains(p, StringComparison.OrdinalIgnoreCase) == true);
+    }
+
     private void Guard()
     {
-        var current = List(true).Where(e => e.Kind != "service" || !e.Microsoft).ToDictionary(e => e.Id, e => e.Name);
+        var entries = List(true).Where(e => e.Kind != "service" || !e.Microsoft).ToList();
+        var current = entries.Select(e => StableId(e.Id)).ToHashSet();
         var known = _store.Load<HashSet<string>?>(System.IO.Path.Combine("startup", "known.json"), () => null);
-        _store.Save(System.IO.Path.Combine("startup", "known.json"), current.Keys.ToHashSet());
+        _store.Save(System.IO.Path.Combine("startup", "known.json"), current);
         if (known is null || !_settings.Current.Alerts.StartupGuard) return; // first run only records the baseline
-        foreach (var (id, name) in current.Where(c => !known.Contains(c.Key)))
-            _notices.Add(NoticeLevel.Warn,
+        known = known.Select(StableId).ToHashSet(); // baselines saved by older versions held raw ids
+        foreach (var e in entries.Where(e => !known.Contains(StableId(e.Id)) && !IsTrustedUpdater(e)).GroupBy(e => StableId(e.Id)).Select(g => g.First()))
+        {
+            var (id, name) = (StableId(e.Id), e.Name);
+            _notices.Add(e.Flags.Count > 0 || !e.Signed ? NoticeLevel.Warn : NoticeLevel.Info,
                 Loc.T("Başlangıca yeni bir öğe eklendi: {0}", "A new startup item was added: {0}").F(name),
                 Loc.T("Bu öğe artık Windows açılırken çalışacak. Tanımıyorsanız Başlangıç sayfasından devre dışı bırakabilirsiniz.",
                       "It will now run when Windows starts. If you do not recognize it, you can disable it on the Startup page."),
                 "startup", "startup-new:" + id, coolDownHours: 24 * 30);
+        }
     }
 
     // ------------------------------------------------------------------ boot history
