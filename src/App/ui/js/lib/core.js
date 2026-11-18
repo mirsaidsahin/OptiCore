@@ -171,6 +171,16 @@ export function confirmDialog(options) {
   return new Promise((resolve) => feedback.set({ dialog: { ...options, resolve } }));
 }
 
+/** Downloads and installs the pending update (job 'update.install'), then offers to restart. `run` is useJob().run. */
+export async function installUpdate(run) {
+  const r = await run('update.install');
+  if (r.installed) {
+    const ok = await confirmDialog({ title: t(`OptiCore ${r.version} kuruldu`, `OptiCore ${r.version} installed`), body: t('Yeni sürümü kullanmak için OptiCore yeniden başlatılsın mı?', 'Restart OptiCore to use the new version?'), confirm: t('Yeniden başlat', 'Restart') });
+    if (ok) await call('shell.restartApp');
+  }
+  return r;
+}
+
 /** Shown when an action needs administrator rights. */
 export function askElevation() {
   const info = app.get().info;
@@ -234,6 +244,9 @@ export function bits(bytesPerSecond) {
 export const ghz = (mhz) => (mhz ? num(mhz / 1000, 2) + ' GHz' : '–');
 export const ms = (v, digits = 0) => (v == null ? '–' : num(v, digits) + ' ms');
 export const temp = (v) => (v == null ? '–' : num(v, 0) + ' °C');
+/** Where the headline temperature came from (LiveSample.tempSource). */
+export const tempSource = (s) => (s === 'lhm' ? 'LibreHardwareMonitor' : s === 'ohm' ? 'OpenHardwareMonitor' : s === 'gpu' ? t('Ekran kartı sensörü', 'GPU sensor') : s === 'acpi' ? t('ACPI termal bölgesi', 'ACPI thermal zone') : '');
+export const noTempText = () => t('Bu bilgisayar işlemci sıcaklığını Windows\'a bildirmiyor. LibreHardwareMonitor açıksa OptiCore sıcaklığı oradan okur.', 'This PC does not report its CPU temperature to Windows. If LibreHardwareMonitor is running, OptiCore reads the temperature from it.');
 
 export function duration(seconds) {
   if (seconds == null) return '–';

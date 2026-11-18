@@ -135,7 +135,116 @@ public static class NetAdapters
 public sealed class DiskIo { public string Name { get; set; } = ""; public double Read { get; set; } public double Write { get; set; } public double Active { get; set; } public double LatencyMs { get; set; } public double Queue { get; set; } }
 public sealed class NetIo { public string Id { get; set; } = ""; public string Name { get; set; } = ""; public string Description { get; set; } = ""; public string Type { get; set; } = ""; public double Down { get; set; } public double Up { get; set; } public long SpeedBps { get; set; } public bool Physical { get; set; } }
 public sealed class GpuLive { public string Name { get; set; } = ""; public double Usage { get; set; } public long MemUsed { get; set; } public long MemTotal { get; set; } public long SharedUsed { get; set; } public long SharedTotal { get; set; } public double? Temp { get; set; } public int? FanRpm { get; set; } public Dictionary<string, double> Engines { get; set; } = []; }
-public sealed class ZoneTemp { public string Name { get; set; } = ""; public double TempC { get; set; } public double PassiveLimit { get; set; } = 100; }
+public sealed class ZoneTemp
+{
+    public string Name { get; set; } = "";
+    public double TempC { get; set; }
+    public double PassiveLimit { get; set; } = 100;
+    /// <summary>The zone always reports the same value: a firmware placeholder, not a sensor. Ignored for the headline temperature.</summary>
+    public bool Static { get; set; }
+}
+
+/// <summary>
+/// Finds ACPI thermal zones that never move. Many laptops expose one zone that is a constant (for example 27.85 °C)
+/// because the real sensor sits behind the embedded controller. A zone is marked static after 60 samples spanning
+/// less than 0.2 °C; the marks are remembered so the next start excludes them at once, and a mark is dropped when
+/// the zone later reports a value at least 1 °C away from the remembered one.
+/// </summary>
+internal sealed class StaticZoneTracker
+{
+    public const int MinSamples = 60;
+    public const double MaxSpan = 0.2;
+    public const double ReleaseDelta = 1.0;
+
+    private sealed class Stat { public double Min = double.MaxValue, Max = double.MinValue; public int Count; }
+
+    private readonly Dictionary<string, Stat> _stats = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, double> _known;
+
+    public StaticZoneTracker(IDictionary<string, double>? known = null) =>
+        _known = new Dictionary<string, double>(known ?? new Dictionary<string, double>(), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>True when the remembered set changed and should be saved.</summary>
+    public bool Dirty { get; private set; }
+    public IReadOnlyDictionary<string, double> Known => _known;
+    public void MarkSaved() => Dirty = false;
+
+    /// <summary>Records one reading and tells whether the zone counts as static.</summary>
+    public bool Observe(string zone, double celsius)
+    {
+        if (_known.TryGetValue(zone, out var value))
+        {
+            if (Math.Abs(celsius - value) < ReleaseDelta) return true;
+            _known.Remove(zone);
+            _stats.Remove(zone);
+            Dirty = true;
+        }
+        if (!_stats.TryGetValue(zone, out var st)) _stats[zone] = st = new Stat();
+        st.Count++;
+        st.Min = Math.Min(st.Min, celsius);
+        st.Max = Math.Max(st.Max, celsius);
+        if (st.Count >= MinSamples && st.Max - st.Min < MaxSpan)
+        {
+            _known[zone] = Math.Round(celsius, 2);
+            Dirty = true;
+            return true;
+        }
+        return false;
+    }
+}
+
+/// <summary>Reads the CPU temperature from LibreHardwareMonitor / OpenHardwareMonitor when one of them is running (they publish sensors through WMI).</summary>
+internal sealed class HardwareMonitorTemp
+{
+    private static readonly (string Scope, string Source)[] Namespaces = [(@"root\LibreHardwareMonitor", "lhm"), (@"root\OpenHardwareMonitor", "ohm")];
+    private const long QueryEveryMs = 5000, AbsentForMs = 60000, StaleAfterMs = 15000;
+
+    private readonly long[] _skipUntil = new long[Namespaces.Length];
+    private long _lastQuery = long.MinValue / 2;
+    private int _busy;
+    private (double Temp, string Source, long At)? _value;
+
+    /// <summary>Latest cached reading; starts a refresh in the background when due. Never blocks the caller.</summary>
+    public (double Temp, string Source)? Current()
+    {
+        long now = Environment.TickCount64;
+        if (now - _lastQuery >= QueryEveryMs && Interlocked.CompareExchange(ref _busy, 1, 0) == 0)
+        {
+            _lastQuery = now;
+            Task.Run(() => { try { Refresh(); } catch { /* optional data */ } finally { Volatile.Write(ref _busy, 0); } });
+        }
+        var v = _value;
+        return v is { } x && now - x.At < StaleAfterMs ? (x.Temp, x.Source) : null;
+    }
+
+    private void Refresh()
+    {
+        for (int i = 0; i < Namespaces.Length; i++)
+        {
+            long now = Environment.TickCount64;
+            if (now < _skipUntil[i]) continue;
+            var rows = Wmi.Query("SELECT Name, Value, Identifier FROM Sensor WHERE SensorType='Temperature'", Namespaces[i].Scope, out var error, 5, quiet: true);
+            if (error is not null) { _skipUntil[i] = now + AbsentForMs; continue; }
+            var picked = Pick(rows.Select(r => (r.S("Name"), r.D("Value"), r.S("Identifier"))));
+            if (picked is double t) { _value = (t, Namespaces[i].Source, Environment.TickCount64); return; }
+            _skipUntil[i] = now + QueryEveryMs;
+        }
+        _value = null;
+    }
+
+    /// <summary>Chooses the CPU temperature: CPU Package, then Core (Tctl/Tdie), Core Average, Core Max, then the hottest "CPU Core #n".</summary>
+    public static double? Pick(IEnumerable<(string Name, double Value, string Id)> sensors)
+    {
+        var list = sensors.Where(s => s.Value is > 1 and < 150 && (s.Id.Length == 0 || s.Id.Contains("cpu", StringComparison.OrdinalIgnoreCase))).ToList();
+        foreach (var name in new[] { "CPU Package", "Core (Tctl/Tdie)", "Core Average", "Core Max" })
+        {
+            var hit = list.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (hit.Name is not null) return hit.Value;
+        }
+        var cores = list.Where(s => s.Name.StartsWith("CPU Core #", StringComparison.OrdinalIgnoreCase)).ToList();
+        return cores.Count > 0 ? cores.Max(s => s.Value) : null;
+    }
+}
 
 /// <summary>One second of system activity.</summary>
 public sealed class LiveSample
@@ -167,6 +276,8 @@ public sealed class LiveSample
     public List<NetIo> Nets { get; set; } = [];
     /// <summary>Hottest temperature Windows exposes without a kernel driver (ACPI thermal zones, GPU).</summary>
     public double? Temp { get; set; }
+    /// <summary>Where <see cref="Temp"/> came from: "lhm" | "ohm" (LibreHardwareMonitor / OpenHardwareMonitor), "acpi", "gpu", or null when nothing reports a temperature.</summary>
+    public string? TempSource { get; set; }
     public List<ZoneTemp> Zones { get; set; } = [];
     public bool Throttled { get; set; }
     public bool OnBattery { get; set; }
@@ -214,6 +325,9 @@ public sealed class MetricsSampler : IDisposable
     private long _prevTicks;
     private Dictionary<string, GpuProbe.Perf> _gpuPerf = [];
     private int _tick;
+    private readonly StaticZoneTracker _zoneTracker;
+    private readonly HardwareMonitorTemp _hwTemp = new();
+    private const string StaticZonesFile = "metrics/static-zones.json";
 
     private readonly List<LiveSample> _minute = [];
     private int _minuteOf = -1;
@@ -225,6 +339,7 @@ public sealed class MetricsSampler : IDisposable
     public MetricsSampler(DataStore store)
     {
         _store = store;
+        _zoneTracker = new StaticZoneTracker(store.Load(StaticZonesFile, () => new Dictionary<string, double>()));
         _nominalMhz = Reg.GetInt(@"HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0", "~MHz") ?? 0;
         // "% Processor Performance" is relative to Windows' base speed, which WMI knows (slow query, so off-thread).
         Task.Run(() =>
@@ -469,9 +584,18 @@ public sealed class MetricsSampler : IDisposable
             if (c is < 1 or > 150) continue;
             s.Zones.Add(new ZoneTemp { Name = name, TempC = c, PassiveLimit = passive.TryGetValue(name, out var p) ? p : 100 });
         }
-        double? hottest = s.Zones.Count > 0 ? s.Zones.Max(z => z.TempC) : null;
-        foreach (var g in s.Gpus) if (g.Temp is double t && (hottest is null || t > hottest)) hottest = t;
-        s.Temp = hottest;
+        foreach (var z in s.Zones) z.Static = _zoneTracker.Observe(z.Name, z.TempC);
+        if (_zoneTracker.Dirty) { _store.Save(StaticZonesFile, _zoneTracker.Known); _zoneTracker.MarkSaved(); }
+
+        // A running LibreHardwareMonitor/OpenHardwareMonitor gives the real CPU temperature; otherwise the hottest zone
+        // that is an actual sensor. The graphics card still counts when it reports one.
+        double? temp = null;
+        string? source = null;
+        if (_hwTemp.Current() is { } hw) { temp = hw.Temp; source = hw.Source; }
+        else if (s.Zones.Where(z => !z.Static).Select(z => (double?)z.TempC).Max() is double acpi) { temp = acpi; source = "acpi"; }
+        foreach (var g in s.Gpus) if (g.Temp is double t && (temp is null || t > temp)) { temp = t; source = "gpu"; }
+        s.Temp = temp;
+        s.TempSource = source;
         // Firmware lowers "% Passive Limit" below 100 when it is actively capping the CPU to shed heat.
         s.Throttled = s.Zones.Any(z => z.PassiveLimit < 99.5) || (s.Cpu > 85 && s.CpuPerf is > 0 and < 95);
     }

@@ -28,7 +28,7 @@ public sealed class OsInfo
     public bool FastStartup { get; set; }
 }
 
-public sealed class ComputerInfo { public string Manufacturer { get; set; } = ""; public string Model { get; set; } = ""; public string Type { get; set; } = "desktop"; public string? Sku { get; set; } public string? Serial { get; set; } }
+public sealed class ComputerInfo { public string Name { get; set; } = Environment.MachineName; public string Manufacturer { get; set; } = ""; public string Model { get; set; } = ""; public string Type { get; set; } = "desktop"; public string? Sku { get; set; } public string? Serial { get; set; } }
 public sealed class BoardInfo { public string Manufacturer { get; set; } = ""; public string Product { get; set; } = ""; public string Version { get; set; } = ""; public string BiosVendor { get; set; } = ""; public string BiosVersion { get; set; } = ""; public DateTime? BiosDate { get; set; } }
 
 public sealed class CpuInfo

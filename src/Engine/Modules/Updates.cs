@@ -7,8 +7,8 @@ using OptiCore.Engine.Platform;
 namespace OptiCore.Engine.Modules;
 
 /// <summary>
-/// Self-update from the project's GitHub releases. Checks at most once a day (only the public release
-/// list is requested, nothing about the PC is sent), downloads OptiCore.exe, verifies its SHA-256 against
+/// Self-update from the project's GitHub releases. Checks on every launch, reusing the GitHub answer for an hour
+/// (only the public release list is requested, nothing about the PC is sent), downloads OptiCore.exe, verifies its SHA-256 against
 /// the digest GitHub publishes, and swaps the running executable: Windows allows renaming a running exe,
 /// so the old file is moved aside and removed on the next start.
 /// </summary>
@@ -62,13 +62,50 @@ public sealed class UpdateService
             download, size, sha, r.TryGetProperty("published_at", out var p) && p.ValueKind == JsonValueKind.String ? p.GetDateTime() : null);
     }
 
+    public sealed record CachedRelease(DateTime CheckedAt, Release? Release);
+
+    private static readonly TimeSpan CacheFor = TimeSpan.FromHours(1);
+    private const string CacheFile = "updates/release-cache.json";
+    private const string SkippedFile = "updates/skipped.json";
+
     public Release? Latest()
     {
         using var http = Client();
         var json = http.GetStringAsync($"https://api.github.com/repos/{Repository}/releases/latest").GetAwaiter().GetResult();
         var release = Parse(json);
         _store.Save("updates/last-check.json", DateTime.UtcNow);
+        _store.Save(CacheFile, new CachedRelease(DateTime.UtcNow, release));
         return release;
+    }
+
+    /// <summary>The latest release, reusing the GitHub answer for an hour so frequent launches stay gentle on the API.</summary>
+    private Release? LatestCached()
+    {
+        var cached = _store.Load<CachedRelease?>(CacheFile, () => null);
+        if (cached is not null && DateTime.UtcNow - cached.CheckedAt < CacheFor && cached.CheckedAt <= DateTime.UtcNow) return cached.Release;
+        return Latest();
+    }
+
+    /// <summary>The release to offer in the launch popup: newer than the running version and not skipped by the user. Pure, so it is testable.</summary>
+    public static Release? PendingFor(Release? latest, string current, string? skippedVersion) =>
+        latest is not null && IsNewer(current, latest.Tag) && !string.Equals(latest.Version, skippedVersion?.Trim().TrimStart('v', 'V'), StringComparison.OrdinalIgnoreCase) ? latest : null;
+
+    // 0 = no launch check (dev server, updates off), 1 = running, 2 = finished
+    private volatile int _launchState;
+    private volatile Release? _launchRelease;
+
+    private object? Pending()
+    {
+        if (_launchState == 0) return null;
+        if (_launchState == 1) return new { checking = true };
+        var r = PendingFor(_launchRelease, OptiCoreEngine.Version, _store.Load<string?>(SkippedFile, () => null));
+        return r is null ? null : new { version = r.Version, tag = r.Tag, notes = r.Notes, url = r.Url, size = r.Size, published = r.Published, checking = false };
+    }
+
+    private object Skip(string version)
+    {
+        _store.Save(SkippedFile, version.Trim().TrimStart('v', 'V'));
+        return new { skipped = version };
     }
 
     private object Check()
@@ -136,27 +173,33 @@ public sealed class UpdateService
         TryDelete(Path.Combine(Path.GetDirectoryName(exe)!, "OptiCore.old.exe"));
     }
 
-    /// <summary>Daily background check; tells the user through the notification center.</summary>
+    /// <summary>
+    /// Checks on every launch (a few seconds after start); the UI asks <c>update.pending</c> and shows a popup.
+    /// A notice is added too, as a secondary reminder.
+    /// </summary>
     public void Start()
     {
         if (_exe() is null || !_settings.Current.CheckUpdates) return;
-        _ = Task.Delay(TimeSpan.FromSeconds(45)).ContinueWith(_ =>
+        _launchState = 1;
+        _ = Task.Delay(TimeSpan.FromSeconds(5)).ContinueWith(_ =>
         {
             try
             {
-                var last = _store.Load<DateTime?>("updates/last-check.json", () => null);
-                if (last is not null && DateTime.UtcNow - last.Value < TimeSpan.FromHours(20)) return;
-                var r = Latest();
+                var r = LatestCached();
+                _launchRelease = r;
                 if (r is not null && IsNewer(OptiCoreEngine.Version, r.Tag))
                     _notices.Add(NoticeLevel.Info, Loc.T("OptiCore {0} yayınlandı", "OptiCore {0} is available").F(r.Version),
                         Loc.T("Ayarlar sayfasından tek tıkla güncelleyebilirsiniz.", "You can update in one click on the Settings page."), "settings", "update." + r.Version, coolDownHours: 24 * 30);
             }
             catch (Exception e) { Log.Warn("update: check", e); }
+            finally { _launchState = 2; }
         });
     }
 
     public void Register(RpcRouter rpc)
     {
+        rpc.On("update.pending", _ => Pending());
+        rpc.On("update.skip", c => Skip(c.Str("version")));
         rpc.On("update.check", _ => Check());
         rpc.On("update.install", _ => _jobs.Start("update.install", Loc.T("OptiCore güncelleniyor", "Updating OptiCore"), Install));
     }

@@ -1,10 +1,10 @@
 // Application shell: sidebar, top bar, router, command palette and notification drawer.
 import {
   html, render, useState, useEffect, useRef, useMemo, useStore, useErrorBoundary, app, call, t, cx, go, currentRoute,
-  applyTheme, patchSettings, uiState, setUiState, askElevation, ago, matches, toast,
+  applyTheme, patchSettings, uiState, setUiState, askElevation, ago, matches, toast, useJob, act, installUpdate, bytes, date,
 } from './lib/core.js';
 import { Icon, Logo } from './lib/icons.js';
-import { Btn, Chip, Drawer, Empty, ErrorBox, FeedbackHost, Loading, MenuHost } from './lib/ui.js';
+import { Btn, Chip, Drawer, Empty, ErrorBox, FeedbackHost, JobBar, Loading, MenuHost, Modal } from './lib/ui.js';
 
 export const ROUTES = [
   { id: 'dashboard', group: 'overview', icon: 'dashboard', title: ['Pano', 'Dashboard'], keys: 'home ana ekran' },
@@ -159,8 +159,32 @@ function NoticeDrawer({ onClose }) {
   <//>`;
 }
 
+/** Shown once per session when the launch-time update check found a newer release that the user has not skipped. */
+function UpdatePrompt({ release, onClose }) {
+  const info = app.get().info;
+  const job = useJob();
+  const install = () => act(async () => {
+    const r = await installUpdate(job.run);
+    if (r && r.installed) onClose();
+  });
+  const skip = () => act(async () => { await call('update.skip', { version: release.version }); onClose(); });
+  const busy = job.running;
+  return html`<${Modal} title=${t(`Yeni sürüm var: OptiCore ${release.version}`, `New version available: OptiCore ${release.version}`)} onClose=${busy ? null : onClose}
+    footer=${html`
+      <${Btn} kind="ghost" disabled=${busy} onClick=${skip}>${t('Bu sürümü atla', 'Skip this version')}<//>
+      <${Btn} kind="ghost" disabled=${busy} onClick=${onClose}>${t('Daha sonra', 'Later')}<//>
+      <${Btn} kind="primary" icon="download" busy=${busy} onClick=${install}>${t('Şimdi güncelle', 'Update now')}<//>`}>
+    <div class="col">
+      <div class="small muted">${t('Yüklü sürüm', 'Installed version')}: ${info.version}${release.size ? ' · ' + bytes(release.size) : ''}${release.published ? ' · ' + date(release.published) : ''}</div>
+      ${release.notes && html`<div class="small" style=${{ maxHeight: '240px', overflow: 'auto', whiteSpace: 'pre-wrap' }}>${release.notes.replace(/^#+\s*/gm, '').replace(/\*\*|`/g, '').trim()}</div>`}
+      <${JobBar} job=${job.job} />
+    </div>
+  <//>`;
+}
+
 function App() {
   const state = useStore(app);
+  const [update, setUpdate] = useState(null);
   const [route, setRoute] = useState(currentRoute());
   const [palette, setPalette] = useState(false);
   const [notices, setNotices] = useState(false);
@@ -185,6 +209,21 @@ function App() {
     poll();
     const id = setInterval(poll, 20000);
     return () => clearInterval(id);
+  }, []);
+
+  // The engine checks for a new release a few seconds after launch; ask for the result (once per session).
+  useEffect(() => {
+    let alive = true, timer = 0, tries = 0;
+    const ask = async () => {
+      try {
+        const r = await call('update.pending');
+        if (!alive) return;
+        if (r && r.checking) { if (++tries < 14) timer = setTimeout(ask, 3000); return; }
+        if (r && r.version) setUpdate(r);
+      } catch { /* the update check is optional */ }
+    };
+    timer = setTimeout(ask, 3000);
+    return () => { alive = false; clearTimeout(timer); };
   }, []);
 
   const info = state.info;
@@ -216,6 +255,7 @@ function App() {
     </div>
     ${palette && html`<${Palette} onClose=${() => setPalette(false)} />`}
     ${notices && html`<${NoticeDrawer} onClose=${() => setNotices(false)} />`}
+    ${update && html`<${UpdatePrompt} release=${update} onClose=${() => setUpdate(null)} />`}
     <${FeedbackHost} />
     <${MenuHost} />
   </div>`;

@@ -1,7 +1,107 @@
 // Network Optimizer: live traffic, latency and loss, DNS benchmark and switch, Wi-Fi, per-app connections, diagnosis and repair.
-import { html, useState, useRpc, useJob, call, act, t, cx, num, bits, ms, pct, confirmDialog, go } from '../lib/core.js';
+import { html, useState, useEffect, useRpc, useJob, call, act, t, cx, num, bits, ms, pct, confirmDialog, go } from '../lib/core.js';
 import { Page, Card, Tabs, Btn, Chip, Icon, Empty, Loading, Banner, Async, Stat, JobBar, Select, FileIcon, KV } from '../lib/ui.js';
 import { LineChart, Ring, BarList } from '../lib/charts.js';
+
+// ---------------------------------------------------------------- download time calculator
+const SIZES_GB = [1, 5, 10, 25, 50, 100, 150];
+const SPEEDS_MBPS = [10, 25, 50, 75, 100, 200, 500, 1000];
+const EFFICIENCY = 0.85;
+const GIB = 1024 ** 3, MIB = 1024 ** 2;
+const CALC_KEY = 'opticore.downloadCalc';
+
+function loadCalc() {
+  try { return JSON.parse(localStorage.getItem(CALC_KEY)) || {}; } catch { return {}; }
+}
+function saveCalc(v) {
+  try { localStorage.setItem(CALC_KEY, JSON.stringify(v)); } catch { /* storage may be unavailable */ }
+}
+
+/** "1 sa 8 dk" / "1 h 8 min"; seconds below a minute. */
+function fmtTime(sec) {
+  if (!isFinite(sec) || sec <= 0) return '–';
+  const s = Math.round(sec);
+  if (s < 60) return t(`${s} sn`, `${s} s`);
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  if (d > 0) return t(`${d} gün ${h} sa`, `${d} d ${h} h`);
+  if (h > 0) return t(`${h} sa ${m} dk`, `${h} h ${m} min`);
+  const rest = s % 60;
+  return rest && m < 10 ? t(`${m} dk ${rest} sn`, `${m} min ${rest} s`) : t(`${m} dk`, `${m} min`);
+}
+
+function DownloadCalc() {
+  const saved = useState(loadCalc)[0];
+  const [presetGb, setPresetGb] = useState(saved.presetGb !== undefined ? saved.presetGb : 50);
+  const [customSize, setCustomSize] = useState(saved.customSize || '');
+  const [unit, setUnit] = useState(saved.unit === 'MB' ? 'MB' : 'GB');
+  const [speedKey, setSpeedKey] = useState(saved.speedKey || 100);   // 'measured' | 'custom' | Mbps preset
+  const [customSpeed, setCustomSpeed] = useState(saved.customSpeed || '');
+  const history = useRpc('bench.history');
+  const job = useJob();
+
+  useEffect(() => saveCalc({ presetGb, customSize, unit, speedKey, customSpeed }), [presetGb, customSize, unit, speedKey, customSpeed]);
+
+  const latest = (history.data || []).find((r) => r.kind === 'network' && r.metrics && r.metrics.downMbps > 0);
+  const measured = latest ? latest.metrics.downMbps : null;
+  const measure = () => act(async () => {
+    const r = await job.run('bench.run', { kind: 'network' });
+    history.reload();
+    setSpeedKey('measured');
+    return r;
+  });
+
+  const customNum = (v) => { const x = parseFloat(String(v).replace(',', '.')); return x > 0 ? x : 0; };
+  const bytesTotal = presetGb != null ? presetGb * GIB : customNum(customSize) * (unit === 'GB' ? GIB : MIB);
+  const mbps = speedKey === 'measured' ? (measured || 0) : speedKey === 'custom' ? customNum(customSpeed) : speedKey;
+  const seconds = (b, m) => (b > 0 && m > 0 ? (b * 8) / (m * 1e6) : 0);
+  const full = seconds(bytesTotal, mbps);
+  const sizeLabel = bytesTotal >= GIB ? num(bytesTotal / GIB, bytesTotal / GIB < 10 ? 1 : 0) + ' GB' : num(bytesTotal / MIB, 0) + ' MB';
+
+  const chip = (on, label, onClick, key) => html`<${Btn} key=${key} size="sm" kind=${on ? 'primary' : null} onClick=${onClick}>${label}<//>`;
+  const rows = [...(measured ? [{ key: 'measured', mbps: measured }] : []), ...SPEEDS_MBPS.map((m) => ({ key: m, mbps: m }))];
+
+  return html`<${Card} title=${t('İndirme süresi hesaplayıcı', 'Download time calculator')} icon="download">
+    <div class="col" style=${{ gap: '14px' }}>
+      <div>
+        <div class="up">${t('Dosya boyutu', 'File size')}</div>
+        <div class="row wrap gap-s mt-s">
+          ${SIZES_GB.map((g) => chip(presetGb === g, g + ' GB', () => setPresetGb(g), g))}
+          <input class="input" type="number" min="0" step="any" style=${{ width: '100px' }} placeholder=${t('Özel', 'Custom')} value=${customSize}
+            onInput=${(e) => { setCustomSize(e.target.value); setPresetGb(null); }} />
+          <${Select} class="sm" value=${unit} onChange=${(u) => { setUnit(u); setPresetGb(null); }} options=${[{ value: 'GB', label: 'GB' }, { value: 'MB', label: 'MB' }]} />
+        </div>
+      </div>
+      <div>
+        <div class="up">${t('İnternet hızı', 'Internet speed')}</div>
+        <div class="row wrap gap-s mt-s">
+          ${measured
+            ? chip(speedKey === 'measured', `${t('Ölçülen hızım', 'My measured speed')} · ${num(measured, measured < 100 ? 1 : 0)} Mbps`, () => setSpeedKey('measured'), 'measured')
+            : html`<${Btn} size="sm" icon="gauge" busy=${job.running} onClick=${measure}>${t('Hızımı ölç', 'Measure my speed')}<//>`}
+          ${SPEEDS_MBPS.map((m) => chip(speedKey === m, m + ' Mbps', () => setSpeedKey(m), m))}
+          <input class="input" type="number" min="0" step="any" style=${{ width: '100px' }} placeholder="Mbps" value=${customSpeed}
+            onInput=${(e) => { setCustomSpeed(e.target.value); setSpeedKey('custom'); }} />
+        </div>
+        <${JobBar} job=${job.job} onCancel=${job.cancel} />
+      </div>
+      <div class="card flat pad">
+        ${full > 0 ? html`
+          <div class="small muted">${sizeLabel} · ${num(mbps, mbps < 100 ? 1 : 0)} Mbps</div>
+          <div class="big mt-s">${fmtTime(full)}</div>
+          <div class="small muted mt-s">${t('Gerçekte genellikle', 'In practice usually')} ≈ <b>${fmtTime(full / EFFICIENCY)}</b></div>
+          <div class="tiny dim mt">${num(mbps, mbps < 100 ? 1 : 0)} Mbps ≈ ${num(mbps / 8, mbps / 8 < 10 ? 2 : 1)} MB/s</div>`
+        : html`<div class="muted">${t('Bir dosya boyutu ve hız seçin.', 'Pick a file size and a speed.')}</div>`}
+        <div class="tiny dim mt">${t('İnternet hızı megabit (Mb) ile, dosya boyutu megabayt (MB) ile ölçülür; 1 bayt = 8 bit.', 'Internet speed is measured in megabits (Mb), file sizes in megabytes (MB); 1 byte = 8 bits.')}</div>
+      </div>
+      ${bytesTotal > 0 && html`<div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th>${t('Hız', 'Speed')}</th><th>${sizeLabel}</th><th>${t('Gerçekte ≈', 'In practice ≈')}</th></tr></thead>
+        <tbody>${rows.map((r) => html`<tr key=${r.key} style=${r.key === 'measured' ? { background: 'var(--accent-soft)' } : null}>
+          <td>${r.key === 'measured' ? t('Ölçülen hızım', 'My measured speed') + ' · ' : ''}${num(r.mbps, r.mbps < 100 ? 1 : 0)} Mbps</td>
+          <td class="num b">${fmtTime(seconds(bytesTotal, r.mbps))}</td>
+          <td class="num muted">${fmtTime(seconds(bytesTotal, r.mbps) / EFFICIENCY)}</td></tr>`)}</tbody>
+      </table></div>`}
+    </div>
+  <//>`;
+}
 
 function Live() {
   const live = useRpc('metrics.live', { history: 120 }, { interval: 1000 });
@@ -29,6 +129,7 @@ function Live() {
       ${w.quality < 50 && html`<div class="mt"><${Banner} tone="warn">${t('Sinyal zayıf. Modeme yaklaşmak, araya giren duvarları azaltmak ya da 5 GHz yerine 2,4 GHz ağı kullanmak (uzak mesafede) bağlantıyı iyileştirir.', 'The signal is weak. Moving closer to the router, reducing walls in between or using the 2.4 GHz network instead of 5 GHz (at long range) improves the connection.')}<//></div>`}
       ${w.open && html`<div class="mt"><${Banner} tone="bad">${t('Bu ağ şifrelenmemiş: aynı ağdaki herkes trafiğinizi görebilir. Hassas işler için VPN kullanın.', 'This network is not encrypted: anyone on it can see your traffic. Use a VPN for sensitive work.')}<//></div>`}
     <//>`}
+    <${DownloadCalc} />
   </div>`;
 }
 

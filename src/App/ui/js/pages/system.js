@@ -1,6 +1,6 @@
 // System Intelligence: the complete hardware and Windows inventory, battery and thermals.
 import {
-  html, useState, useEffect, useRpc, t, bytes, num, pct, ghz, temp, date, dateTime, duration, bits, tone, cx, go, act, saveText, call,
+  html, useState, useEffect, useRpc, t, bytes, num, pct, ghz, temp, tempSource, noTempText, date, dateTime, duration, bits, tone, cx, go, act, saveText, call,
 } from '../lib/core.js';
 import { Page, Card, Tabs, KV, Chip, Bar, Btn, Async, Banner, Empty, Stat, ElevationHint, Icon, Loading } from '../lib/ui.js';
 import { LineChart, Ring } from '../lib/charts.js';
@@ -23,6 +23,7 @@ function Overview({ hw }) {
   return html`<div class="grid c2">
     <${Card} title=${t('Bilgisayar', 'Computer')} icon="monitor">
       <${KV} rows=${[
+        [t('Bilgisayar adı', 'Computer name'), computer.name],
         [t('Üretici', 'Manufacturer'), computer.manufacturer],
         [t('Model', 'Model'), computer.model],
         [t('Tür', 'Type'), types[computer.type] || computer.type],
@@ -251,7 +252,7 @@ function Thermal() {
   return html`<div class="col gap-l">
     <div class="grid c4">
       <div class="card pad"><${Stat} label=${t('Sıcaklık', 'Temperature')} value=${hasTemp ? num(n.temp) : '–'} unit=${hasTemp ? '°C' : ''} tone=${hasTemp && tone(n.temp, 80, 92) !== 'good' ? tone(n.temp, 80, 92) : null}
-        sub=${hasTemp ? (n.zones.length ? t('ACPI termal bölgesi', 'ACPI thermal zone') : t('ekran kartı', 'graphics card')) : t('sensör yok', 'no sensor')} /></div>
+        sub=${hasTemp ? tempSource(n.tempSource) : t('sensör yok', 'no sensor')} /></div>
       <div class="card pad"><${Stat} label=${t('Isıl kısılma', 'Thermal throttling')} value=${n.throttled ? t('Var', 'Active') : t('Yok', 'None')} tone=${n.throttled ? 'bad' : 'good'}
         sub=${n.zones[0] ? t('pasif sınır ', 'passive limit ') + pct(Math.min(...n.zones.map((z) => z.passiveLimit))) : null} /></div>
       <div class="card pad"><${Stat} label=${t('İşlemci hızı', 'Processor speed')} value=${num(n.cpuMhz / 1000, 2)} unit="GHz" sub=${t('temel hızın ', '') + pct(n.cpuPerf) + t('', ' of base speed')} /></div>
@@ -262,15 +263,16 @@ function Thermal() {
       <${LineChart} series=${[{ label: t('İşlemci yükü %', 'CPU load %'), data: h.cpu, color: '#7c6cff' }, { label: t('Hız (temelin %)', 'Speed (% of base)'), data: h.mhz.map((m) => (n.cpuMhz && n.cpuPerf ? (m / (n.cpuMhz / n.cpuPerf * 100)) * 100 : 0)), color: '#22d3ee' }]}
         format=${(v) => num(v)} height=${200} area=${false} />
     <//>
+    ${!hasTemp && html`<${Banner} tone="info" icon="thermo">${noTempText()}<//>`}
     ${hasTemp && html`<${Card} title=${t('Sıcaklık', 'Temperature')} icon="thermo" sub=${t('son 3 dakika', 'last 3 minutes')}>
       <${LineChart} series=${[{ label: '°C', data: h.temp, color: '#fb7185' }]} format=${(v) => num(v) + ' °C'} height=${170} max=${Math.max(60, ...h.temp) + 10} />
     <//>`}
     <${Card} title=${t('Sensörler', 'Sensors')} icon="thermo">
       ${n.zones.length || n.gpus.some((g) => g.temp != null) ? html`<${KV} rows=${[
-        ...n.zones.map((z) => [z.name, html`<span>${temp(z.tempC)} · ${t('pasif sınır', 'passive limit')} ${pct(z.passiveLimit)}</span>`]),
+        ...n.zones.map((z) => [z.name, html`<span>${temp(z.tempC)} · ${t('pasif sınır', 'passive limit')} ${pct(z.passiveLimit)}${z.static ? html` · <span class="warn">${t('sabit değer — gerçek sensör değil', 'fixed value — not a real sensor')}</span>` : ''}</span>`]),
         ...n.gpus.filter((g) => g.temp != null).map((g) => [g.name, temp(g.temp)]),
       ]} />` : html`<div class="muted small">${t('Windows bu donanımda sıcaklık bildirmiyor.', 'Windows reports no temperatures on this hardware.')}</div>`}
-      <div class="tiny dim mt">${t('OptiCore çekirdek sürücüsü yüklemez. Bu yüzden yalnızca Windows\'un kendi sunduğu sensörleri (ACPI termal bölgeleri, ekran kartı, yönetici modunda diskler) okur; çekirdek başına işlemci sıcaklığı bu yolla alınamaz. Kısılma tespiti ise sıcaklık değerine değil, donanım yazılımının bildirdiği hız sınırına dayanır ve her sistemde çalışır.',
+      <div class="tiny dim mt">${t('LibreHardwareMonitor veya OpenHardwareMonitor açıksa OptiCore işlemci sıcaklığını oradan okur. ', 'If LibreHardwareMonitor or OpenHardwareMonitor is running, OptiCore reads the CPU temperature from it. ')}${t('OptiCore çekirdek sürücüsü yüklemez.Bu yüzden yalnızca Windows\'un kendi sunduğu sensörleri (ACPI termal bölgeleri, ekran kartı, yönetici modunda diskler) okur; çekirdek başına işlemci sıcaklığı bu yolla alınamaz. Kısılma tespiti ise sıcaklık değerine değil, donanım yazılımının bildirdiği hız sınırına dayanır ve her sistemde çalışır.',
         'OptiCore installs no kernel driver. It therefore reads only the sensors Windows itself exposes (ACPI thermal zones, the graphics card, disks when elevated); per-core CPU temperature is not available this way. Throttle detection does not depend on a temperature reading: it uses the speed limit reported by the firmware, which works on every system.')}</div>
     <//>
   </div>`;

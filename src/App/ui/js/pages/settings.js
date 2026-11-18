@@ -1,5 +1,5 @@
 // Settings: appearance, language, behaviour, data and about.
-import { html, useState, useRpc, useJob, call, act, t, app, useStore, patchSettings, askElevation, confirmDialog } from '../lib/core.js';
+import { html, useState, useRpc, useJob, call, act, t, app, useStore, patchSettings, askElevation, installUpdate } from '../lib/core.js';
 import { Page, Card, Btn, Chip, Switch, Select, KV, Banner, JobBar, openUrl } from '../lib/ui.js';
 import { Logo } from '../lib/icons.js';
 
@@ -9,13 +9,7 @@ function Updates({ s, info }) {
   const [check, setCheck] = useState(null);
   const job = useJob();
   const run = () => act(async () => setCheck(await call('update.check')));
-  const install = () => act(async () => {
-    const r = await job.run('update.install');
-    if (r.installed) {
-      const ok = await confirmDialog({ title: t(`OptiCore ${r.version} kuruldu`, `OptiCore ${r.version} installed`), body: t('Yeni sürümü kullanmak için OptiCore yeniden başlatılsın mı?', 'Restart OptiCore to use the new version?'), confirm: t('Yeniden başlat', 'Restart') });
-      if (ok) await call('shell.restartApp');
-    }
-  });
+  const install = () => act(() => installUpdate(job.run));
   return html`<${Card} title=${t('Güncellemeler', 'Updates')} icon="download">
     <div class="item" style=${{ padding: '8px 0' }}><div class="grow"><div class="t">${t('Yüklü sürüm', 'Installed version')}: ${info.version}</div>
       <div class="s">${check ? (check.newer ? t(`Yeni sürüm var: ${check.latest}`, `A new version is available: ${check.latest}`) : t('OptiCore güncel.', 'OptiCore is up to date.')) : t('Yeni sürümler GitHub\'daki proje sayfasından denetlenir.', 'New versions are checked on the project\'s GitHub page.')}</div></div>
@@ -29,7 +23,7 @@ function Updates({ s, info }) {
       <${JobBar} job=${job.job} />
     </div>`}
     <div class="item" style=${{ padding: '8px 0' }}><div class="grow"><div class="t">${t('Güncellemeleri otomatik denetle', 'Check for updates automatically')}</div>
-      <div class="s">${t('Günde en fazla bir kez; yalnızca herkese açık sürüm listesi okunur, bilgisayarınızla ilgili hiçbir bilgi gönderilmez.', 'At most once a day; only the public release list is read, nothing about your PC is sent.')}</div></div>
+      <div class="s">${t('Her açılışta bir kez; yeni sürüm varsa bir pencere açılır. Yalnızca herkese açık sürüm listesi okunur, bilgisayarınızla ilgili hiçbir bilgi gönderilmez.', 'Once at every launch; a window opens when a new version exists. Only the public release list is read, nothing about your PC is sent.')}</div></div>
       <${Switch} on=${s.checkUpdates} onChange=${(checkUpdates) => patchSettings({ checkUpdates })} /></div>
   <//>`;
 }

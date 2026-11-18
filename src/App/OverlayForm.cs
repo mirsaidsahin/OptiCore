@@ -63,7 +63,7 @@ internal sealed class OverlayForm : Form
                 double core = s.Cores.Length > 0 ? s.Cores.Max() : s.Cpu;
                 lines.Add($"CPU {s.Cpu:0}%  (max {core:0}%)");
                 lines.Add($"GPU {s.Gpu:0}%  ·  RAM {s.MemPercent:0}%");
-                if (s.Temp is double t) lines.Add($"{t:0} °C{(s.Throttled ? "  · THROTTLE" : "")}");
+                lines.Add(s.Temp is double t ? $"{t:0} °C{(s.Throttled ? "  · THROTTLE" : "")}" : $"— °C{(s.Throttled ? "  · THROTTLE" : "")}");
             }
             _lines = [.. lines];
             Invalidate();

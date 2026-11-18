@@ -229,7 +229,7 @@ public static class Wmi
     public static List<WmiRow> Query(string wql, string scope = @"root\cimv2", int timeoutSec = 30) => Query(wql, scope, out _, timeoutSec);
 
     /// <param name="error">null on success, "denied" when admin rights are needed, otherwise "unavailable".</param>
-    public static List<WmiRow> Query(string wql, string scope, out string? error, int timeoutSec = 30)
+    public static List<WmiRow> Query(string wql, string scope, out string? error, int timeoutSec = 30, bool quiet = false)
     {
         var rows = new List<WmiRow>();
         error = null;
@@ -255,7 +255,7 @@ public static class Wmi
         catch (Exception e)
         {
             error = "unavailable";
-            Log.Warn($"wmi: {scope} :: {wql}", e);
+            if (!quiet) Log.Warn($"wmi: {scope} :: {wql}", e);
         }
         return rows;
     }

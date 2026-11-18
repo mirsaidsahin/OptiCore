@@ -1,6 +1,6 @@
 // Dashboard: health score, what to do next, and the live state of the machine.
 import {
-  html, useState, useRpc, t, pct, bytes, rate, bits, ghz, temp, num, tone, go, cx, duration, ago, uiState, setUiState, act, runJob,
+  html, useState, useRpc, t, pct, bytes, rate, bits, ghz, temp, tempSource, noTempText, num, tone, go, cx, duration, ago, uiState, setUiState, act, runJob,
 } from '../lib/core.js';
 import { Page, Card, Bar, Btn, Chip, FileIcon, Icon, Loading, Modal, Switch, Tabs, Empty, SimulationNote } from '../lib/ui.js';
 import { Spark, Ring, BarList } from '../lib/charts.js';
@@ -166,8 +166,8 @@ function PowerCard({ live }) {
         ${n.temp != null ? html`
           <div class=${cx('big mt-s', tone(n.temp, 80, 92) !== 'good' && tone(n.temp, 80, 92))}>${num(n.temp)}<small>°C</small></div>
           <div class="small muted">${n.throttled ? t('İşlemci kısılıyor', 'CPU is throttled') : t('Kısılma yok', 'No throttling')}</div>
-          <div class="tiny dim mt">${n.zones.length ? t('ACPI termal bölgesi', 'ACPI thermal zone') : t('Ekran kartı sensörü', 'GPU sensor')}</div>`
-        : html`<div class="small muted mt-s">${t('Bu donanım, sürücü yüklemeden okunabilen bir sıcaklık sensörü sunmuyor.', 'This hardware exposes no temperature sensor readable without a driver.')}</div>`}
+          <div class="tiny dim mt">${tempSource(n.tempSource)}</div>`
+        : html`<div class="big mt-s dim">—</div><div class="small muted mt-s">${noTempText()}</div>`}
       </div>
     </div>
   <//>`;
@@ -216,7 +216,7 @@ export default function Dashboard() {
 
   return html`<${Page}
     title=${hw ? t(`Merhaba, ${hw.os.user}`, `Hello, ${hw.os.user}`) : 'OptiCore'}
-    desc=${hw ? `${hw.computer.manufacturer} ${hw.computer.model} · ${hw.os.name} ${hw.os.version} · ${t('çalışma süresi', 'uptime')} ${duration(hw.os.uptimeSeconds)}` : null}
+    desc=${hw ? `${hw.computer.name ? hw.computer.name + ' · ' : ''}${hw.computer.manufacturer} ${hw.computer.model} · ${hw.os.name} ${hw.os.version} · ${t('çalışma süresi', 'uptime')} ${duration(hw.os.uptimeSeconds)}` : null}
     actions=${html`<${Btn} icon="sliders" kind="ghost" onClick=${() => setCustomize(true)}>${t('Özelleştir', 'Customize')}<//>`}>
     <div class="col" style=${{ gap: '14px' }}>
       <${SimulationNote} />

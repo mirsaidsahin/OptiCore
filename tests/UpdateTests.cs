@@ -13,6 +13,24 @@ public class UpdateTests
     public void Release_tags_are_compared_as_versions(string current, string tag, bool newer) =>
         Assert.Equal(newer, UpdateService.IsNewer(current, tag));
 
+    private static UpdateService.Release Rel(string tag) => new(tag.TrimStart('v'), tag, "notes", "https://e/r", "https://e/o", 1, null, null);
+
+    [Fact]
+    public void Pending_release_is_offered_only_when_newer_and_not_skipped()
+    {
+        Assert.NotNull(UpdateService.PendingFor(Rel("v0.4.0"), "0.3.0", null));
+        Assert.Null(UpdateService.PendingFor(Rel("v0.3.0"), "0.3.0", null));
+        Assert.Null(UpdateService.PendingFor(null, "0.3.0", null));
+        Assert.Null(UpdateService.PendingFor(Rel("v0.4.0"), "0.3.0", "0.4.0"));
+        Assert.Null(UpdateService.PendingFor(Rel("v0.4.0"), "0.3.0", "v0.4.0"));
+    }
+
+    [Fact]
+    public void A_newer_release_appears_again_after_an_older_one_was_skipped()
+    {
+        Assert.NotNull(UpdateService.PendingFor(Rel("v0.5.0"), "0.3.0", "0.4.0"));
+    }
+
     [Fact]
     public void Release_json_yields_the_exe_asset_and_its_digest()
     {
